@@ -177,6 +177,8 @@ class Config:
     emd: bool
     l1: bool
     deterministic_algorithm: bool
+    error_bounded_requirement: float
+    save_error_bounded_deltas: bool
 
 
 def create_default_config(workspace_name: str, project_name: str) -> str:
@@ -228,6 +230,8 @@ def set_config(c):
     c.activation_extraction        = False
     c.deterministic_algorithm      = True
     c.separate_model_saving        = False
+    c.error_bounded_requirement    = 1.0
+    c.save_error_bounded_deltas    = false
 
 """
 
