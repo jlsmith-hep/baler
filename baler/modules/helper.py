@@ -545,6 +545,7 @@ def compress(model_path, config):
         model_path=model_path,
         n_features=n_features,
         z_dim=config.latent_space_size,
+        model_name=config.model_name
     )
     model.eval()
 
@@ -681,6 +682,7 @@ def decompress(
         model_path=model_path,
         n_features=number_of_columns,
         z_dim=latent_space_size,
+        model_name=model_name
     )
     model.eval()
 
@@ -816,6 +818,7 @@ def perform_hls4ml_conversion(output_path, config):
         model_path=model_path,
         n_features=config.number_of_columns,
         z_dim=config.latent_space_size,
+        model_name=config.model_name
     )
     model.to("cpu")
 

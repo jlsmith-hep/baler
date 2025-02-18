@@ -86,7 +86,7 @@ def initialise_model(model_name: str):
     return model_object
 
 
-def load_model(model_object, model_path: str, n_features: int, z_dim: int):
+def load_model(model_object, model_path: str, n_features: int, z_dim: int, model_name: str):
     """Loads the state dictionary of the trained model into a model variable. This variable is then used for passing
     data through the encoding and decoding functions.
 
@@ -99,8 +99,12 @@ def load_model(model_object, model_path: str, n_features: int, z_dim: int):
     Returns: nn.Module: Returns a model object with the attributes of the model class, with the selected state
     dictionary loaded into it.
     """
+
     device = helper.get_device()
-    model = model_object(n_features, z_dim)
+    if model_name == "TransformerAE":
+        model = model_object(in_dim=n_features, latent_size=z_dim)
+    else:
+        model = model_object(n_features, z_dim)
     model.to(device)
 
     # Loading the state_dict into the model
