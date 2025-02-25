@@ -22,6 +22,8 @@ from .modules import helper
 import gzip
 from .modules.profiling import pytorch_profile
 
+import logging
+# logger = logging.getLogger(__name__)
 
 __all__ = (
     "perform_compression",
@@ -34,6 +36,7 @@ __all__ = (
 
 
 def main():
+    logger = logging.getLogger(__name__)
     """Calls different functions depending on argument parsed in command line.
 
         - if --mode=newProject: call `helper.create_new_project` and create a new project sub directory with config file
@@ -47,6 +50,7 @@ def main():
     Raises:
         NameError: Raises error if the chosen mode does not exist.
     """
+    logger.debug("Main")
     (
         config,
         mode,
@@ -54,24 +58,35 @@ def main():
         project_name,
         verbose,
     ) = helper.get_arguments()
+    if verbose: 
+        logging.basicConfig(level=logging.DEBUG)
+    logger.debug("Got arguments")
     project_path = os.path.join("workspaces", workspace_name, project_name)
     output_path = os.path.join(project_path, "output")
 
     if mode == "newProject":
+        logger.debug("Making new project")
         helper.create_new_project(workspace_name, project_name, verbose)
     elif mode == "train":
+        logger.debug("Training")
         perform_training(output_path=output_path, config=config, verbose=verbose)
     elif mode == "diagnose":
+        logger.debug("Diagnosing")
         perform_diagnostics(output_path, verbose)
     elif mode == "compress":
+        logger.debug("Compressing")
         perform_compression(output_path, config, verbose)
     elif mode == "decompress":
+        logger.debug("Decompressing")
         perform_decompression(output_path, config, verbose)
     elif mode == "plot":
+        logger.debug("Plotting")
         perform_plotting(output_path, config, verbose)
     elif mode == "info":
+        logger.debug("Printing info")
         print_info(output_path, config)
     elif mode == "convert_with_hls4ml":
+        logger.debug("Converting with hls4ml")
         helper.perform_hls4ml_conversion(output_path, config)
     else:
         raise NameError(
@@ -82,6 +97,7 @@ def main():
 
 
 def perform_training(output_path, config, verbose: bool):
+    logger = logging.getLogger(__name__)
     """Main function calling the training functions, ran when --mode=train is selected.
         The three functions called are: `helper.process`, `helper.mode_init` and `helper.training`.
 
@@ -108,13 +124,13 @@ def perform_training(output_path, config, verbose: bool):
         config.convert_to_blocks if hasattr(config, "convert_to_blocks") else None,
         verbose,
     )
-
-    if verbose:
-        print("Training and testing sets normalized")
+    logger.debug("Loaded data")
+    logger.debug("Training and testing sets normalized")
 
     try:
         n_features = 0
         if config.data_dimension == 1:
+            logger.debug("1D dataset")
             number_of_columns = train_set_norm.shape[1]
             config.latent_space_size = ceil(
                 number_of_columns / config.compression_ratio
@@ -122,14 +138,18 @@ def perform_training(output_path, config, verbose: bool):
             config.number_of_columns = number_of_columns
             n_features = number_of_columns
         elif config.data_dimension == 2:
+            logger.debug("2D dataset")
             if config.model_type == "dense":
+                logger.debug("Dense model")
                 number_of_rows = train_set_norm.shape[1]
                 number_of_columns = train_set_norm.shape[2]
                 n_features = number_of_columns * number_of_rows
+                
             else:
                 number_of_rows = original_shape[1]
                 number_of_columns = original_shape[2]
                 n_features = number_of_columns
+                
             config.latent_space_size = ceil(
                 (number_of_rows * number_of_columns) / config.compression_ratio
             )
@@ -140,20 +160,13 @@ def perform_training(output_path, config, verbose: bool):
                 + str(config.data_dimension)
             )
     except AttributeError:
-        if verbose:
-            print(
-                f"{config.number_of_columns} -> {config.latent_space_size} dimensions"
-            )
+        logger.debug(f"{config.number_of_columns} -> {config.latent_space_size} dimensions")
         assert number_of_columns == config.number_of_columns
 
-    if verbose:
-        print(
-            f"Intitalizing Model with Latent Size - {config.latent_space_size} and Features - {n_features}"
-        )
+    logger.debug(f"Intitalizing Model with Latent Size - {config.latent_space_size} and Features - {n_features}")
 
     device = helper.get_device()
-    if verbose:
-        print(f"Device used for training: {device}")
+    logger.debug(f"Device used for training: {device}")
 
     model_object = helper.model_init(config.model_name)
     if config.model_name == "TransformerAE":
@@ -161,35 +174,32 @@ def perform_training(output_path, config, verbose: bool):
     else:
         model = model_object(n_features=n_features, z_dim=config.latent_space_size)
     model.to(device)
+    
+    logger.debug("Initialised model, sent to device")
 
     if config.model_name == "Conv_AE_3D" and hasattr(
         config, "compress_to_latent_space"
     ):
         model.set_compress_to_latent_space(config.compress_to_latent_space)
 
-    if verbose:
-        print(f"Model architecture:\n{model}")
+    # if verbose:
+        # print(f"Model architecture:\n{model}")
 
     training_path = os.path.join(output_path, "training")
-    if verbose:
-        print(f"Training path: {training_path}")
+    logger.debug(f"Training path: {training_path}")
 
     trained_model = helper.train(
         model, number_of_columns, train_set_norm, test_set_norm, training_path, config
     )
 
-    if verbose:
-        print("Training complete")
+    logger.debug("Training complete")
 
     if config.apply_normalization:
         np.save(
             os.path.join(training_path, "normalization_features.npy"),
             normalization_features,
         )
-        if verbose:
-            print(
-                f"Normalization features saved to {os.path.join(training_path, 'normalization_features.npy')}"
-            )
+        logger.debug(f"Normalization features saved to {os.path.join(training_path, 'normalization_features.npy')}")
 
     if config.separate_model_saving:
         helper.encoder_decoder_saver(
@@ -198,23 +208,18 @@ def perform_training(output_path, config, verbose: bool):
             os.path.join(output_path, "compressed_output", "decoder.pt"),
         )
     else:
-        helper.model_saver(
-            trained_model, os.path.join(output_path, "compressed_output", "model.pt")
-        )
-    if verbose:
-        print(
-            f"Model saved to {os.path.join(output_path, 'compressed_output', 'model.pt')}"
-        )
-
-        print("\nThe model has the following structure:")
-        print(model.type)
+        helper.model_saver( trained_model, os.path.join(output_path, "compressed_output", "model.pt") )
+    
+    logger.debug(f"Model saved to {os.path.join(output_path, 'compressed_output', 'model.pt')}" )
+    logger.debug("\nThe model has the following structure:")
+    logger.debug(model.type)
 
 
 def perform_diagnostics(project_path, verbose: bool):
+    logger = logging.getLogger(__name__)
     output_path = os.path.join(project_path, "plotting")
-    if verbose:
-        print("Performing diagnostics")
-        print(f"Saving plots to {output_path}")
+    logger.debug("Performing diagnostics")
+    logger.debug(f"Saving plots to {output_path}")
     if not os.path.exists(output_path):
         os.makedirs(output_path)
     input_path = os.path.join(project_path, "training", "activations.npy")
@@ -222,6 +227,7 @@ def perform_diagnostics(project_path, verbose: bool):
 
 
 def perform_plotting(output_path, config, verbose: bool):
+    logger = logging.getLogger(__name__)
     """Main function calling the two plotting functions, ran when --mode=plot is selected.
        The two main functions this calls are: `helper.plotter` and `helper.loss_plotter`
 
@@ -230,9 +236,8 @@ def perform_plotting(output_path, config, verbose: bool):
         config (dataClass): Base class selecting user inputs
         verbose (bool): If True, prints out more information
     """
-    if verbose:
-        print("Plotting...")
-        print(f"Saving plots to {output_path}")
+    logger.debug("Plotting...")
+    logger.debug(f"Saving plots to {output_path}")
     helper.loss_plotter(
         os.path.join(output_path, "training", "loss_data.npy"), output_path, config
     )
@@ -240,6 +245,7 @@ def perform_plotting(output_path, config, verbose: bool):
 
 
 def perform_compression(output_path, config, verbose: bool):
+    logger = logging.getLogger(__name__)
     """Main function calling the compression functions, ran when --mode=compress is selected.
        The main function being called here is: `helper.compress`
 
@@ -257,7 +263,7 @@ def perform_compression(output_path, config, verbose: bool):
         - The data headers
         - Normalization features if `config.apply_normalization=True`
     """
-    print("Compressing...")
+    logger.info("Compressing...")
     start = time.time()
     normalization_features = []
 
@@ -288,16 +294,13 @@ def perform_compression(output_path, config, verbose: bool):
 
     end = time.time()
 
-    print("Compression took:", f"{(end - start) / 60:.3} minutes")
+    logger.info("Compression took:", f"{(end - start) / 60:.3} minutes")
 
     names = np.load(config.input_path)["names"]
 
     if config.extra_compression:
-        if verbose:
-            print("Extra compression selected")
-            print(
-                f"Saving compressed file to {os.path.join(output_path, 'compressed_output', 'compressed.npz')}"
-            )
+        logger.debug("Extra compression selected")
+        logger.debug(f"Saving compressed file to {os.path.join(output_path, 'compressed_output', 'compressed.npz')}")
         np.savez_compressed(
             os.path.join(output_path, "compressed_output", "compressed.npz"),
             data=compressed,
@@ -305,11 +308,8 @@ def perform_compression(output_path, config, verbose: bool):
             normalization_features=normalization_features,
         )
     else:
-        if verbose:
-            print("Extra compression not selected")
-            print(
-                f"Saving compressed file to {os.path.join(output_path, 'compressed_output', 'compressed.npz')}"
-            )
+        logger.debug("Extra compression not selected")
+        logger.debug(f"Saving compressed file to {os.path.join(output_path, 'compressed_output', 'compressed.npz')}")
         np.savez(
             os.path.join(output_path, "compressed_output", "compressed.npz"),
             data=compressed,
@@ -342,6 +342,7 @@ def perform_compression(output_path, config, verbose: bool):
 
 
 def perform_decompression(output_path, config, verbose: bool):
+    logger = logging.getLogger(__name__)
     """Main function calling the decompression functions, ran when --mode=decompress is selected.
        The main function being called here is: `helper.decompress`
 
@@ -352,7 +353,7 @@ def perform_decompression(output_path, config, verbose: bool):
         config (dataClass): Base class selecting user inputs
         verbose (bool): If True, prints out more information
     """
-    print("Decompressing...")
+    logger.info("Decompressing...")
 
     start = time.time()
     model_name = config.model_name
@@ -391,8 +392,7 @@ def perform_decompression(output_path, config, verbose: bool):
             output_path=output_path,
             original_shape=data_before.shape,
         )
-    if verbose:
-        print(f"Model used: {model_name}")
+    logger.debug(f"Model used: {model_name}")
 
     if hasattr(config, "convert_to_blocks") and config.convert_to_blocks:
         print(
@@ -411,14 +411,11 @@ def perform_decompression(output_path, config, verbose: bool):
             )
 
     if config.apply_normalization:
-        print("Un-normalizing...")
+        logger.info("Un-normalizing...")
         normalization_features = np.load(
             os.path.join(output_path, "training", "normalization_features.npy"),
         )
-        if verbose:
-            print(
-                f"Normalization features loaded from {os.path.join(output_path, 'training', 'normalization_features.npy')}"
-            )
+        logger.debug(f"Normalization features loaded from {os.path.join(output_path, 'training', 'normalization_features.npy')}")
 
         decompressed = helper.renormalize(
             decompressed,
@@ -427,8 +424,7 @@ def perform_decompression(output_path, config, verbose: bool):
         )
 
     try:
-        if verbose:
-            print("Converting to original data types")
+        logger.debug("Converting to original data types")
         type_list = config.type_list
         decompressed = np.transpose(decompressed)
         for index, column in enumerate(decompressed):
@@ -441,11 +437,8 @@ def perform_decompression(output_path, config, verbose: bool):
     print("Decompression took:", f"{(end - start) / 60:.3} minutes")
 
     if config.extra_compression:
-        if verbose:
-            print("Extra compression selected")
-            print(
-                f"Saving decompressed file to {os.path.join(output_path, 'decompressed_output', 'decompressed.npz')}"
-            )
+        logger.debug("Extra compression selected")
+        logger.debug(f"Saving decompressed file to {os.path.join(output_path, 'decompressed_output', 'decompressed.npz')}")
         np.savez_compressed(
             os.path.join(output_path, "decompressed_output", "decompressed.npz"),
             data=decompressed,
@@ -460,6 +453,7 @@ def perform_decompression(output_path, config, verbose: bool):
 
 
 def print_info(output_path, config):
+    logger = logging.getLogger(__name__)
     """Function which prints information about your total compression ratios and the file sizes.
 
     Args:meta_data
@@ -495,19 +489,13 @@ def print_info(output_path, config):
         os.stat(files[file]).st_size / (1024 * 1024) for file in range(len(files))
     ]
 
-    print(
-        f"\nCompressed file is {round(file_stats[1] / file_stats[0], 4) * 100}% the size of the original\n"
-    )
-    print(f"File size before compression: {round(file_stats[0], 4)} MB\n")
-    print(f"Compressed file size: {round(file_stats[1], 4)} MB\n")
-    print(f"De-compressed file size: {round(file_stats[2], 4)} MB\n")
-    print(f"Compression ratio: {round(file_stats[0] / file_stats[1], 4)}\n")
-    print(
-        f"The meta-data saved has a total size of: {round(sum(meta_data_stats),4)} MB\n"
-    )
-    print(
-        f"Combined, the actual compression ratio is: {round((file_stats[0])/(file_stats[1] + sum(meta_data_stats)),4)}"
-    )
-    print("\n ==================================")
+    logger.info(f"\nCompressed file is {round(file_stats[1] / file_stats[0], 4) * 100}% the size of the original\n")
+    logger.info(f"File size before compression: {round(file_stats[0], 4)} MB\n")
+    logger.info(f"Compressed file size: {round(file_stats[1], 4)} MB\n")
+    logger.info(f"De-compressed file size: {round(file_stats[2], 4)} MB\n")
+    logger.info(f"Compression ratio: {round(file_stats[0] / file_stats[1], 4)}\n")
+    logger.info(f"The meta-data saved has a total size of: {round(sum(meta_data_stats),4)} MB\n")
+    logger.info(f"Combined, the actual compression ratio is: {round((file_stats[0])/(file_stats[1] + sum(meta_data_stats)),4)}")
+    logger.info("\n ==================================")
 
     ## TODO: Add way to print how much your data has been distorted

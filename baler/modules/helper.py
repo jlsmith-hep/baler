@@ -30,8 +30,12 @@ from sklearn.model_selection import train_test_split
 
 from ..modules import training, plotting, data_processing, diagnostics
 
+import logging
+# logger = logging.getLogger(__name__)
+
 
 def get_arguments():
+    logger = logging.getLogger(__name__)
     """Determines the arguments one is able to apply in the command line when running Baler. Use `--help` to see what
     options are available.
 
@@ -107,6 +111,7 @@ def create_new_project(
     verbose: bool = False,
     base_path: str = "workspaces",
 ) -> None:
+    logger = logging.getLogger(__name__)
     """Creates a new project directory output subdirectories and config files within a workspace.
 
     Args:
@@ -119,7 +124,7 @@ def create_new_project(
     workspace_path = os.path.join(base_path, workspace_name)
     project_path = os.path.join(base_path, workspace_name, project_name)
     if os.path.exists(project_path):
-        print(f"The workspace and project ({project_path}) already exists.")
+        logger.warning(f"The workspace and project ({project_path}) already exists.")
         return
     os.makedirs(project_path)
 
@@ -133,11 +138,9 @@ def create_new_project(
         os.path.join(project_path, "output", "training"),
     ]
 
-    if verbose:
-        print(f"Creating project {project_name} in workspace {workspace_name}...")
+    logger.debug(f"Creating project {project_name} in workspace {workspace_name}...")
     for directory in required_directories:
-        if verbose:
-            print(f"Creating directory {directory}...")
+        logger.debug(f"Creating directory {directory}...")
         os.makedirs(directory, exist_ok=True)
 
     # Populate default config
@@ -259,6 +262,7 @@ def numpy_to_tensor(data):
 
 
 def normalize(data, custom_norm):
+    logger = logging.getLogger(__name__)
     """Applies `data_processing.normalize()` along every axis of given data
 
     Args:
@@ -268,9 +272,14 @@ def normalize(data, custom_norm):
     Returns:
         ndarray: Normalized data
     """
+    logger.debug("Normalizing the data")
+    logger.debug("Shape before normalization: %s", data.shape)
+    logger.debug("Max: %s, Min: %s, Mean: %s, Std: %s", data.max(), data.min(), data.mean(), data.std())
     data = np.apply_along_axis(
         data_processing.normalize, axis=0, arr=data, custom_norm=custom_norm
     )
+    logger.debug("Shape after normalization: %s", data.shape)
+    logger.debug("Max: %s, Min: %s, Mean: %s, Std: %s", data.max(), data.min(), data.mean(), data.std())
     return data
 
 
@@ -282,6 +291,7 @@ def process(
     convert_to_blocks,
     verbose,
 ):
+    logger = logging.getLogger(__name__)
     """Loads the input data into a ndarray, splits it into train/test splits and normalizes if chosen.
 
     Args:
@@ -293,21 +303,30 @@ def process(
     Returns: ndarray, ndarray, ndarray: Array with the train set, array with the test set and array with the
     normalization features.
     """
+    logger.debug("Loading the data...")
     loaded = np.load(input_path)
     data = loaded["data"]
 
-    if verbose:
-        print("Original Dataset Shape - ", data.shape)
+    logger.debug("Original data shape: %s", data.shape)
+    logger.debug("Original data stats - Max: %s, Min: %s, Mean: %s, Std: %s", data.max(), data.min(), data.mean(), data.std())
 
     original_shape = data.shape
 
     if convert_to_blocks:
+        logger.debug("Blocking the data...")
         data = data_processing.convert_to_blocks_util(convert_to_blocks, data)
+        
+        logger.debug("Blocked data shape: %s", data.shape)
+        logger.debug("Blocked data stats - Max: %s, Min: %s, Mean: %s, Std: %s", data.max(), data.min(), data.mean(), data.std())
+
 
     normalization_features = data_processing.find_minmax(data)
     if apply_normalization:
-        print("Normalizing the data...")
+        logger.debug("Normalising the data...")
         data = normalize(data, custom_norm)
+        
+        logger.debug("Normalised data shape: %s", data.shape)
+        logger.debug("Normalised data stats - Max: %s, Min: %s, Mean: %s, Std: %s", data.max(), data.min(), data.mean(), data.std())
     if not test_size:
         train_set = data
         test_set = train_set
@@ -320,6 +339,7 @@ def process(
 
 
 def renormalize(data, true_min_list, feature_range_list):
+    logger = logging.getLogger(__name__)
     """Calls `data_processing.renormalize_func()`.
 
     Args:
@@ -330,10 +350,12 @@ def renormalize(data, true_min_list, feature_range_list):
     Returns:
         ndarray: Un-normalized array
     """
+    logger.debug("Renormalizing the data")
     return data_processing.renormalize_func(data, true_min_list, feature_range_list)
 
 
 def train(model, number_of_columns, train_set, test_set, project_path, config):
+    logger = logging.getLogger(__name__)
     """Calls `training.train()`
 
     Args:
@@ -347,12 +369,14 @@ def train(model, number_of_columns, train_set, test_set, project_path, config):
     Returns:
         _type_: _description_
     """
+    logger.debug("Training the model")
     return training.train(
         model, number_of_columns, train_set, test_set, project_path, config
     )
 
 
 def plotter(output_path, config):
+    logger = logging.getLogger(__name__)
     """Calls `plotting.plot()`
 
     Args:
@@ -362,8 +386,8 @@ def plotter(output_path, config):
     """
 
     plotting.plot(output_path, config)
-    print("=== Done ===")
-    print("Your plots are available in:", os.path.join(output_path, "plotting"))
+    logger.info("=== Done ===")
+    logger.info("Your plots are available in:", os.path.join(output_path, "plotting"))
 
 
 def loss_plotter(path_to_loss_data, output_path, config):
@@ -471,6 +495,7 @@ def save_error_bounded_requirement(config, decoded_output, data_batch):
 
 
 def compress(model_path, config):
+    logger = logging.getLogger(__name__)
     """Function which performs the compression of the input file. In order to compress, you must have a dataset whose
     path is determined by `input_path` in the `config`. You also need a trained model from path `model_path`. The
     model path is then used to initialize the model used for compression. The data is then converted into a
@@ -498,7 +523,7 @@ def compress(model_path, config):
         )
 
     if config.apply_normalization:
-        print("Normalizing...")
+        logger.info("Normalizing...")
         data = normalize(data_before, config.custom_norm)
     else:
         data = data_before
@@ -533,7 +558,7 @@ def compress(model_path, config):
     except AttributeError:
         number_of_columns = config.number_of_columns
         latent_space_size = config.latent_space_size
-        print(f"{number_of_columns} -> {latent_space_size} dimensions")
+        logger.warning(f"{number_of_columns} -> {latent_space_size} dimensions")
 
     # Initialise and load the model correctly.
     latent_space_size = config.latent_space_size
@@ -612,7 +637,7 @@ def compress(model_path, config):
                 compressed = np.concatenate((compressed, compressed_output))
 
     if config.save_error_bounded_deltas:
-        print("Total Deltas Found - ", deltas_compressed)
+        logger.info("Total Deltas Found - ", deltas_compressed)
 
     return (compressed, error_bound_batch, error_bound_deltas, error_bound_index)
 
@@ -627,6 +652,7 @@ def decompress(
     output_path,
     original_shape,
 ):
+    logger = logging.getLogger(__name__)
     """Function which performs the decompression of the compressed file. In order to decompress, you must have a
     compressed file, whose path is determined by `input_path`, a model from path `model_path` and a model_name. The
     model path and model names are used to initialize the model used for decompression. The data is then converted
@@ -725,7 +751,7 @@ def decompress(
                 decompressed = np.concatenate((decompressed, out))
 
     if config.save_error_bounded_deltas:
-        print("Total Deltas Added - ", deltas_added)
+        logger.info("Total Deltas Added - ", deltas_added)
 
     if config.data_dimension == 2 and config.model_type == "dense":
         decompressed = decompressed.reshape(

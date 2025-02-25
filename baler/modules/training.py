@@ -28,6 +28,10 @@ from ..modules import utils
 from torch.nn import functional as F
 
 
+import logging
+# logger = logging.getLogger(__name__)
+
+
 def fit(
     config,
     model,
@@ -40,6 +44,7 @@ def fit(
     l1,
     n_dimensions,
 ):
+    logger = logging.getLogger(__name__)
     """This function trains the model on the train set. It computes the losses and does the backwards propagation, and updates the optimizer as well.
     Args:
         model (modelObject): The model you wish to train
@@ -54,7 +59,7 @@ def fit(
         list, model object: Training loss and trained model
     """
 
-    print("### Beginning Training")
+    logger.debug("Training model")
 
     model.train()
 
@@ -97,11 +102,12 @@ def fit(
         running_loss += loss.item()
 
     epoch_loss = running_loss / (idx + 1)
-    print(f"# Finished. Training Loss: {loss:.6f}")
+    logger.debug(f"# Finished. Training Loss: {loss:.6f}")
     return epoch_loss, mse_loss, l1_loss, model
 
 
 def validate(model, test_dl, model_children, reg_param):
+    logger = logging.getLogger(__name__)
     """Function used to validate the training. Not necessary for doing compression, but gives a good indication of wether the model selected is a good fit or not.
     Args:
         model (modelObject): Defines the model one wants to validate. The model used here is passed directly from `fit()`.
@@ -111,7 +117,7 @@ def validate(model, test_dl, model_children, reg_param):
     Returns:
         float: Validation loss
     """
-    print("### Beginning Validating")
+    logger.info("### Beginning Validating")
 
     model.eval()
 
@@ -133,7 +139,7 @@ def validate(model, test_dl, model_children, reg_param):
             running_loss += loss.item()
 
     epoch_loss = running_loss / (idx + 1)
-    print(f"# Finished. Validation Loss: {loss:.6f}")
+    logger.info(f"# Finished. Validation Loss: {loss:.6f}")
     return epoch_loss
 
 
@@ -148,6 +154,7 @@ def seed_worker(worker_id):
 
 
 def train(model, variables, train_data, test_data, project_path, config):
+    logger = logging.getLogger(__name__)
     """Does the entire training loop by calling the `fit()` and `validate()`. Appart from this, this is the main function where the data is converted
         to the correct type for it to be trained, via `torch.Tensor()`. Furthermore, the batching is also done here, based on `config.batch_size`,
         and it is the `torch.utils.data.DataLoader` doing the splitting.
@@ -166,6 +173,7 @@ def train(model, variables, train_data, test_data, project_path, config):
     # Fix the random seed - TODO: add flag to make this optional
 
     if config.deterministic_algorithm:
+        logger.debug("Deterministic Algorithm")
         random.seed(0)
         torch.manual_seed(0)
         np.random.seed(0)
@@ -189,10 +197,20 @@ def train(model, variables, train_data, test_data, project_path, config):
     # Initialize model with appropriate device
     device = helper.get_device()
     model = model.to(device)
+    logger.debug("Model initialized")
+    
+    logger.debug("Training sample shape: %s", train_data.shape)
+    logger.debug("Training sample max,min,mean,stdev: %s, %s, %s, %s", train_data.max(), train_data.min(), train_data.mean(), train_data.std())
+    logger.debug("Testing sample shape: %s", test_data.shape)
+    logger.debug("Testing sample max,min,mean,stdev: %s, %s, %s, %s", test_data.max(), test_data.min(), test_data.mean(), test_data.std())
+    
 
     # Converting data to tensors
+    logger.debug("Converting data to tensors")
     if config.data_dimension == 2:
+        logger.debug("2D Dataset")
         if config.model_type == "dense":
+            logger.debug("Dense model")
             # print(train_data.shape)
             # print(test_data.shape)
             # sys.exit()
@@ -203,6 +221,7 @@ def train(model, variables, train_data, test_data, project_path, config):
                 test_data.shape[0], test_data.shape[1] * test_data.shape[2]
             )
         elif config.model_type == "convolutional" and config.model_name == "Conv_AE_3D":
+            logger.debug("Conv_AE_3D model")
             train_ds = torch.tensor(
                 train_data, dtype=torch.float32, device=device
             ).view(
@@ -220,6 +239,7 @@ def train(model, variables, train_data, test_data, project_path, config):
                 train_data.shape[2],
             )
         elif config.model_type == "convolutional":
+            logger.debug("convolutional model")
             train_ds = torch.tensor(
                 train_data, dtype=torch.float32, device=device
             ).view(train_data.shape[0], 1, train_data.shape[1], train_data.shape[2])
@@ -227,13 +247,22 @@ def train(model, variables, train_data, test_data, project_path, config):
                 train_data.shape[0], 1, train_data.shape[1], train_data.shape[2]
             )
     elif config.data_dimension == 1:
+        logger.debug("1D Dataset")
         train_ds = torch.tensor(train_data, dtype=torch.float64, device=device)
         valid_ds = torch.tensor(test_data, dtype=torch.float64, device=device)
+        
+    
+    logger.debug("Training tensor shape: %s", train_ds.shape)
+    logger.debug("Training tensor max,min,mean,stdev: %s, %s, %s, %s", train_ds.max(), train_ds.min(), train_ds.mean(), train_ds.std())
+    logger.debug("Testing tensor shape: %s", valid_ds.shape)
+    logger.debug("Testing tensor max,min,mean,stdev: %s, %s, %s, %s", valid_ds.max(), valid_ds.min(), valid_ds.mean(), valid_ds.std())
 
     # Pushing input data into the torch-DataLoader object and combines into one DataLoader object (a basic wrapper
     # around several DataLoader objects).
 
+    logger.debug("Making Dataloaders")
     if config.deterministic_algorithm:
+        logger.debug("Deterministic Algorithm")
         train_dl = DataLoader(
             train_ds,
             batch_size=bs,
@@ -250,6 +279,7 @@ def train(model, variables, train_data, test_data, project_path, config):
             drop_last=False,
         )
     else:
+        logger.debug("Non-Deterministic Algorithm")
         train_dl = DataLoader(
             train_ds,
             batch_size=bs,
@@ -264,18 +294,18 @@ def train(model, variables, train_data, test_data, project_path, config):
 
     # Select Optimizer
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    logger.debug("Optimizer selected")
 
     # Activate early stopping
     if config.early_stopping:
-        early_stopping = utils.EarlyStopping(
-            patience=config.early_stopping_patience, min_delta=config.min_delta
-        )  # Changes to patience & min_delta can be made in configs
+        early_stopping = utils.EarlyStopping(patience=config.early_stopping_patience, min_delta=config.min_delta)  # Changes to patience & min_delta can be made in configs
+        logger.debug("Early stopping configured")
 
     # Activate LR Scheduler
     if config.lr_scheduler:
-        lr_scheduler = utils.LRScheduler(
-            optimizer=optimizer, patience=config.lr_scheduler_patience
-        )
+        lr_scheduler = utils.LRScheduler(optimizer=optimizer, patience=config.lr_scheduler_patience)
+        logger.debug("LR Scheduler configured")
+        
 
     # Training and Validation of the model
     train_loss = []
@@ -287,7 +317,7 @@ def train(model, variables, train_data, test_data, project_path, config):
         hooks = model.store_hooks()
 
     for epoch in range(epochs):
-        print(f"Epoch {epoch + 1} of {epochs}")
+        logger.info(f"Epoch {epoch + 1} of {epochs}")
 
         train_epoch_loss, mse_loss_fit, regularizer_loss_fit, trained_model = fit(
             config=config,
@@ -329,6 +359,7 @@ def train(model, variables, train_data, test_data, project_path, config):
                 helper.model_saver(model, path)
 
     end = time.time()
+    logger.debug("Training complete")
 
     # Saving activations values
     if config.activation_extraction:
