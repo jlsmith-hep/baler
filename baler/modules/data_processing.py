@@ -22,15 +22,18 @@ from sklearn.model_selection import train_test_split
 from ..modules import helper
 from ..modules import models
 
+import logging
+logger = logging.getLogger(__name__)
+
 
 def convert_to_blocks_util(blocks, data):
-    print(
-        "Converted Dataset to Blocks of Size - ", blocks, " from original ", data.shape
-    )
     blocks = np.array(blocks)
     original_shape = np.array(data.shape)
     total_size = np.prod(original_shape)
     data = data.reshape((total_size // (blocks[1] * blocks[2])), blocks[1], blocks[2])
+    logger.info(
+        "Converted Dataset to Blocks of Size - ", blocks, " from original ", data.shape
+    )
     return data
 
 

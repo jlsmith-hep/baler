@@ -23,6 +23,7 @@ import gzip
 from .modules.profiling import pytorch_profile
 
 import logging
+import datetime
 # logger = logging.getLogger(__name__)
 
 __all__ = (
@@ -37,6 +38,7 @@ __all__ = (
 
 def main():
     logger = logging.getLogger(__name__)
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M")
     """Calls different functions depending on argument parsed in command line.
 
         - if --mode=newProject: call `helper.create_new_project` and create a new project sub directory with config file
@@ -58,8 +60,12 @@ def main():
         project_name,
         verbose,
     ) = helper.get_arguments()
+    
     if verbose: 
-        logging.basicConfig(level=logging.DEBUG)
+        logging.basicConfig( level=logging.DEBUG)
+    else:
+        logging.basicConfig( level=logging.INFO)
+        
     logger.debug("Got arguments")
     project_path = os.path.join("workspaces", workspace_name, project_name)
     output_path = os.path.join(project_path, "output")
@@ -268,33 +274,22 @@ def perform_compression(output_path, config, verbose: bool):
     normalization_features = []
 
     if config.apply_normalization:
+        logger.debug("Applying normalization")
         normalization_features = np.load(
             os.path.join(output_path, "training", "normalization_features.npy")
         )
     if config.separate_model_saving:
-        (
-            compressed,
-            error_bound_batch,
-            error_bound_deltas,
-            error_bound_index,
-        ) = helper.compress(
-            model_path=os.path.join(output_path, "compressed_output", "encoder.pt"),
-            config=config,
-        )
+        logger.debug
+        model_name = "encoder"
     else:
-        (
-            compressed,
-            error_bound_batch,
-            error_bound_deltas,
-            error_bound_index,
-        ) = helper.compress(
-            model_path=os.path.join(output_path, "compressed_output", "model.pt"),
-            config=config,
-        )
+        model_name = "model"
+    
+    logger.debug("Compressing")
+    (compressed,error_bound_batch,error_bound_deltas,error_bound_index) = helper.compress(model_path=os.path.join(output_path, "compressed_output", model_name+".pt"),config=config)
 
     end = time.time()
 
-    logger.info("Compression took:", f"{(end - start) / 60:.3} minutes")
+    logger.info(f"Compression took {(end - start) / 60:.3} minutes")
 
     names = np.load(config.input_path)["names"]
 
@@ -317,6 +312,7 @@ def perform_compression(output_path, config, verbose: bool):
             normalization_features=normalization_features,
         )
     if config.save_error_bounded_deltas:
+        logger.debug("Saving error bounded deltas")
         error_bound_batch_index = np.array(
             [error_bound_batch, error_bound_index], dtype=object
         )

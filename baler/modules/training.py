@@ -66,7 +66,7 @@ def fit(
     running_loss = 0.0
     device = helper.get_device()
 
-    for idx, inputs in enumerate(tqdm(train_dl)):
+    for idx, inputs in enumerate(train_dl):
         inputs = inputs.to(device)
 
         # Set the gradients to zero
@@ -83,6 +83,7 @@ def fit(
             loss, mse_loss, l1_loss = utils.loss_function_swae(
                 inputs, z, reconstructions, latent_dim
             )
+            logger.debug("Got loss (swae)")
         else:
             # Compute how far off the prediction is
             loss, mse_loss, l1_loss = utils.mse_sum_loss_l1(
@@ -92,17 +93,20 @@ def fit(
                 reg_param=regular_param,
                 validate=True,
             )
+            logger.debug("Got loss (mse)")
 
         # Compute the loss-gradient with
         loss.backward()
+        logger.debug("Computed gradient")
 
         # Update the optimizer
         optimizer.step()
+        logger.debug("Updated optimizer")
 
         running_loss += loss.item()
 
     epoch_loss = running_loss / (idx + 1)
-    logger.debug(f"# Finished. Training Loss: {loss:.6f}")
+    logger.debug(f"Loss: {loss:.6f}")
     return epoch_loss, mse_loss, l1_loss, model
 
 
@@ -316,8 +320,8 @@ def train(model, variables, train_data, test_data, project_path, config):
     if config.activation_extraction:
         hooks = model.store_hooks()
 
-    for epoch in range(epochs):
-        logger.info(f"Epoch {epoch + 1} of {epochs}")
+    for epoch in tqdm(range(epochs)):
+        # logger.info(f"Epoch {epoch + 1} of {epochs}")
 
         train_epoch_loss, mse_loss_fit, regularizer_loss_fit, trained_model = fit(
             config=config,
@@ -332,6 +336,7 @@ def train(model, variables, train_data, test_data, project_path, config):
             n_dimensions=config.data_dimension,
         )
         train_loss.append(train_epoch_loss)
+        logger.debug("Completed fit")
 
         if test_size:
             val_epoch_loss = validate(
@@ -340,6 +345,7 @@ def train(model, variables, train_data, test_data, project_path, config):
                 model_children=model_children,
                 reg_param=reg_param,
             )
+            logger.debug("Completed validation")
             val_loss.append(val_epoch_loss)
         else:
             val_epoch_loss = train_epoch_loss
@@ -350,6 +356,7 @@ def train(model, variables, train_data, test_data, project_path, config):
         if config.early_stopping:
             early_stopping(val_epoch_loss)
             if early_stopping.early_stop:
+                logger.debug("Reached early stopping")
                 break
 
         ## Implementation to save models & values after every N epochs, where N is stored in 'intermittent_saving_patience':
@@ -357,6 +364,7 @@ def train(model, variables, train_data, test_data, project_path, config):
             if epoch % intermittent_saving_patience == 0:
                 path = os.path.join(project_path, f"model_{epoch}.pt")
                 helper.model_saver(model, path)
+                logger.debug("Model saved")
 
     end = time.time()
     logger.debug("Training complete")

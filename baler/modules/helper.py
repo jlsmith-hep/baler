@@ -511,26 +511,39 @@ def compress(model_path, config):
     Returns:
         torch.Tensor: Compressed data as PyTorch tensor
     """
-
+    
+    logger.debug("Compressing the data")
     # Loads the data and applies normalization if config.apply_normalization = True
     loaded = np.load(config.input_path)
     data_before = loaded["data"]
     original_shape = data_before.shape
+    logger.debug("Original data shape: %s", data_before.shape)
+    logger.debug("Original data stats - Max: %s, Min: %s, Mean: %s, Std: %s", data_before.max(), data_before.min(), data_before.mean(), data_before.std())
 
     if hasattr(config, "convert_to_blocks") and config.convert_to_blocks:
+        logger.debug("Blocking the data...")
         data_before = data_processing.convert_to_blocks_util(
             config.convert_to_blocks, data_before
         )
+        logger.debug("Blocked data shape: %s", data_before.shape)
+        logger.debug("Blocked data stats - Max: %s, Min: %s, Mean: %s, Std: %s", data_before.max(), data_before.min(), data_before.mean(), data_before.std())
+        
 
     if config.apply_normalization:
         logger.info("Normalizing...")
         data = normalize(data_before, config.custom_norm)
+        logger.debug("Normalized data shape: %s", data.shape)
+        logger.debug("Normalized data stats - Max: %s, Min: %s, Mean: %s, Std: %s", data.max(), data.min(), data.mean(), data.std())
     else:
         data = data_before
+        
     number_of_columns = 0
+    
+    logger.debug("Calculating the latent space size")
     try:
         n_features = 0
         if config.data_dimension == 1:
+            logger.debug("1D data")
             column_names = np.load(config.input_path)["names"]
             number_of_columns = len(column_names)
             config.latent_space_size = ceil(
@@ -538,8 +551,16 @@ def compress(model_path, config):
             )
             config.number_of_columns = number_of_columns
             n_features = number_of_columns
+            
+            logger.debug("n_features: %s", n_features)
+            logger.debug("number_of_columns: %s", config.number_of_columns)
+            logger.debug("Compression ratio: %s", config.compression_ratio)
+            logger.debug("Latent space size: %s", config.latent_space_size)
         elif config.data_dimension == 2:
+            logger.debug("2D data")
+            
             if config.model_type == "dense":
+                logger.debug("Dense model")
                 number_of_rows = data.shape[1]
                 config.number_of_columns = data.shape[2]
                 n_features = number_of_rows * config.number_of_columns
@@ -547,9 +568,15 @@ def compress(model_path, config):
                 number_of_rows = original_shape[1]
                 config.number_of_columns = original_shape[2]
                 n_features = config.number_of_columns
+            
+            logger.debug("n_features: %s", n_features)
+            logger.debug("number_of_columns: %s", config.number_of_columns)
+            logger.debug("number_of_rows: %s", number_of_rows)
+            logger.debug("Compression ratio: %s", config.compression_ratio)
             config.latent_space_size = ceil(
                 (number_of_rows * config.number_of_columns) / config.compression_ratio
             )
+            logger.debug("Latent space size: %s", config.latent_space_size)
         else:
             raise NameError(
                 "Data dimension can only be 1 or 2. Got config.data_dimension = "
@@ -558,13 +585,15 @@ def compress(model_path, config):
     except AttributeError:
         number_of_columns = config.number_of_columns
         latent_space_size = config.latent_space_size
-        logger.warning(f"{number_of_columns} -> {latent_space_size} dimensions")
+        logger.warning(f"AttributeError! {number_of_columns} -> {latent_space_size} dimensions")
 
     # Initialise and load the model correctly.
     latent_space_size = config.latent_space_size
     bs = config.batch_size
     device = get_device()
+    logger.debug("Device: %s", device)
     model_object = data_processing.initialise_model(config.model_name)
+    logger.debug("Initialised model")
     model = data_processing.load_model(
         model_object,
         model_path=model_path,
@@ -572,8 +601,11 @@ def compress(model_path, config):
         z_dim=config.latent_space_size,
         model_name=config.model_name
     )
+    logger.debug("Loaded model")
     model.eval()
+    logger.debug("Model set to eval mode")
 
+    logger.debug("Converting data to tensor")
     if config.data_dimension == 2:
         if config.model_type == "convolutional" and config.model_name == "Conv_AE_3D":
             data_tensor = torch.tensor(data, dtype=torch.float32).view(
@@ -591,6 +623,7 @@ def compress(model_path, config):
         data_tensor = torch.tensor(data, dtype=torch.float64)
 
     # Batching data to avoid memory leaks
+    logger.debug("Batching & Loading data")
     data_dl = DataLoader(
         data_tensor,
         batch_size=bs,
@@ -606,11 +639,16 @@ def compress(model_path, config):
         [],
     )
 
+    logger.debug("Compressing data")
     with torch.no_grad():
         for idx, data_batch in enumerate(tqdm(data_dl)):
             data_batch = data_batch.to(device)
+            logger.debug("Sent data to device")
 
             compressed_output = model.encode(data_batch)
+            logger.debug("Encoded data")
+            logger.debug("Compressed output shape: %s", compressed_output.shape)
+            logger.debug("Compressed output stats - Max: %s, Min: %s, Mean: %s, Std: %s", compressed_output.max(), compressed_output.min(), compressed_output.mean(), compressed_output.std())
 
             if config.save_error_bounded_deltas:
                 decoded_output = model.decode(compressed_output)
@@ -636,9 +674,12 @@ def compress(model_path, config):
             else:
                 compressed = np.concatenate((compressed, compressed_output))
 
-    if config.save_error_bounded_deltas:
-        logger.info("Total Deltas Found - ", deltas_compressed)
+    logger.debug("Done compression")
 
+    if config.save_error_bounded_deltas:
+        logger.debug("Saving Error Bounded Deltas")
+        logger.info(f"Total Deltas Found - {deltas_compressed}")
+        
     return (compressed, error_bound_batch, error_bound_deltas, error_bound_index)
 
 
