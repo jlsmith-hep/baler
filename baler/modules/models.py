@@ -22,6 +22,8 @@ from torch.nn import functional as F
 from torch.autograd import Function
 from ..modules import helper
 
+import logging
+
 
 class LowerBound(Function):
     @staticmethod
@@ -808,6 +810,7 @@ class TransformerAE(nn.Module):
         )
 
     def encode(self, x: torch.Tensor):
+        logger = logging.getLogger(__name__)
         """_summary_
 
         Args:
@@ -816,16 +819,45 @@ class TransformerAE(nn.Module):
         Returns:
             _type_: _description_
         """
+        logger.debug("Transformer Encode")
+        logger.debug("input shape: %s", x.shape)
+        logger.debug("input type: %s", x.dtype)
+        logger.debug("input stats: %s", x.mean(), x.std())
         z = self.transformer_encoder_layer_1(x)
+        logger.debug("Transformer encoder layer 1 done")
+        logger.debug("new shape: %s", z.shape)
+        logger.debug("new type: %s", z.dtype)
+        logger.debug("new stats: %s", z.mean(), z.std())
         z = self.encoder_layer_1(z)
+        logger.debug("encoder layer 1 done")
+        logger.debug("new shape: %s", z.shape)
+        logger.debug("new type: %s", z.dtype)
+        logger.debug("new stats: %s", z.mean(), z.std())
         z = self.transformer_encoder_layer_2(z)
+        logger.debug("Transformer encoder layer 2 done")
+        logger.debug("new shape: %s", z.shape)
+        logger.debug("new type: %s", z.dtype)
+        logger.debug("new stats: %s", z.mean(), z.std())
         z = self.encoder_layer_2(z)
+        logger.debug("encoder layer 2 done")
+        logger.debug("new shape: %s", z.shape)
+        logger.debug("new type: %s", z.dtype)
+        logger.debug("new stats: %s", z.mean(), z.std())
         z = self.transformer_encoder_layer_3(z)
+        logger.debug("Transformer encoder layer 3 done")
+        logger.debug("new shape: %s", z.shape)
+        logger.debug("new type: %s", z.dtype)
+        logger.debug("new stats: %s", z.mean(), z.std())
         z = self.encoder_layer_3(z)
+        logger.debug("encoder layer 3 done")
+        logger.debug("final shape: %s", z.shape)
+        logger.debug("final type: %s", z.dtype)
+        logger.debug("final stats: %s", z.mean(), z.std())
 
         return z
 
     def decode(self, z: torch.Tensor):
+        logger = logging.getLogger(__name__)
         """_summary_
 
         Args:
@@ -834,12 +866,40 @@ class TransformerAE(nn.Module):
         Returns:
             _type_: _description_
         """
+        logger.debug("Transformer Decode")
+        logger.debug("input shape: %s", z.shape)
+        logger.debug("input type: %s", z.dtype)
+        logger.debug("input stats: %s", z.mean(), z.std())
         x = self.decoder_layer_3(z)
+        logger.debug("Decoder layer 3 done")
+        logger.debug("new shape: %s", x.shape)
+        logger.debug("new type: %s", x.dtype)
+        logger.debug("new stats: %s", x.mean(), x.std())
         x = self.transformer_decoder_layer_3(x)
+        logger.debug("Transformer decoder layer 3 done")
+        logger.debug("new shape: %s", x.shape)
+        logger.debug("new type: %s", x.dtype)
+        logger.debug("new stats: %s", x.mean(), x.std())
         x = self.decoder_layer_2(x)
+        logger.debug("Decoder layer 2 done")
+        logger.debug("new shape: %s", x.shape)
+        logger.debug("new type: %s", x.dtype)
+        logger.debug("new stats: %s", x.mean(), x.std())
         x = self.transformer_decoder_layer_2(x)
+        logger.debug("Transformer decoder layer 2 done")
+        logger.debug("new shape: %s", x.shape)
+        logger.debug("new type: %s", x.dtype)
+        logger.debug("new stats: %s", x.mean(), x.std())
         x = self.decoder_layer_1(x)
+        logger.debug("Decoder layer 1 done")
+        logger.debug("new shape: %s", x.shape)
+        logger.debug("new type: %s", x.dtype)
+        logger.debug("new stats: %s", x.mean(), x.std())
         x = self.transformer_decoder_layer_1(x)
+        logger.debug("Transformer decoder layer 1 done")
+        logger.debug("final shape: %s", x.shape)
+        logger.debug("final type: %s", x.dtype)
+        logger.debug("final stats: %s", x.mean(), x.std())
         return x
 
     def forward(self, x: torch.Tensor):
